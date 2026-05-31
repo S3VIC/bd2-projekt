@@ -1,0 +1,190 @@
+@page "/logs"
+@model LogsModel
+@{
+    ViewData["Title"] = "Audit Logs";
+}
+
+<section class="card">
+    <h2>Audit logs</h2>
+    <p class="muted">Fetch recent logs and remove a specific entry by its ID.</p>
+
+    <div id="logs-status" class="status-message hidden" role="status" aria-live="polite"></div>
+
+    <div class="logs-toolbar">
+        <button type="button" id="refresh-logs" class="btn btn-primary">Refresh logs</button>
+    </div>
+
+    <div class="logs-table-wrapper">
+        <table class="logs-table">
+            <thead>
+            <tr>
+                <th>ID</th>
+                <th>Outcome</th>
+                <th>Event</th>
+                <th>Email</th>
+                <th>HTTP</th>
+                <th>Source</th>
+                <th>Created (UTC)</th>
+                <th>Action</th>
+            </tr>
+            </thead>
+            <tbody id="logs-table-body">
+            <tr>
+                <td colspan="8">No data loaded yet.</td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <form id="delete-log-form" class="reservation-form delete-log-form" autocomplete="off">
+        <div class="form-row">
+            <label for="delete-log-id">Audit log ID</label>
+            <input id="delete-log-id" name="deleteLogId" maxlength="120" placeholder="Paste audit log ID to delete" required />
+            <span class="field-validation-error" id="error-deleteLogId"></span>
+        </div>
+        <div class="button-row">
+            <button type="submit" class="btn btn-light">Delete by ID</button>
+        </div>
+    </form>
+</section>
+
+@section Scripts {
+    <script>
+        const statusElement = document.getElementById("logs-status");
+        const refreshButton = document.getElementById("refresh-logs");
+        const logsTableBody = document.getElementById("logs-table-body");
+        const deleteForm = document.getElementById("delete-log-form");
+        const deleteLogIdInput = document.getElementById("delete-log-id");
+        const deleteLogIdError = document.getElementById("error-deleteLogId");
+
+        function setStatus(message, isError) {
+            statusElement.textContent = message;
+            statusElement.classList.remove("hidden", "is-error");
+            if (isError) {
+                statusElement.classList.add("is-error");
+            }
+        }
+
+        function clearStatus() {
+            statusElement.classList.add("hidden");
+            statusElement.classList.remove("is-error");
+            statusElement.textContent = "";
+        }
+
+        function clearDeleteError() {
+            deleteLogIdError.textContent = "";
+        }
+
+        function setDeleteError(message) {
+            deleteLogIdError.textContent = message;
+        }
+
+        function createCell(text) {
+            const cell = document.createElement("td");
+            cell.textContent = text ?? "";
+            return cell;
+        }
+
+        function createDeleteButtonCell(logId) {
+            const cell = document.createElement("td");
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "btn btn-light btn-small";
+            button.dataset.logId = logId;
+            button.textContent = "Delete";
+            cell.appendChild(button);
+            return cell;
+        }
+
+        function renderLogs(logs) {
+            logsTableBody.replaceChildren();
+
+            if (!Array.isArray(logs) || logs.length === 0) {
+                const row = document.createElement("tr");
+                const cell = document.createElement("td");
+                cell.colSpan = 8;
+                cell.textContent = "No logs found.";
+                row.appendChild(cell);
+                logsTableBody.appendChild(row);
+                return;
+            }
+
+            for (const log of logs) {
+                const row = document.createElement("tr");
+                row.appendChild(createCell(log.auditLogId));
+                row.appendChild(createCell(log.outcome));
+                row.appendChild(createCell(log.eventType ?? "-"));
+                row.appendChild(createCell(log.email ?? "-"));
+                row.appendChild(createCell(log.httpStatusCode?.toString() ?? "-"));
+                row.appendChild(createCell(log.source ?? "-"));
+                row.appendChild(createCell(log.createdAtUtc ? new Date(log.createdAtUtc).toISOString() : "-"));
+                row.appendChild(createDeleteButtonCell(log.auditLogId));
+                logsTableBody.appendChild(row);
+            }
+        }
+
+        async function fetchLogs() {
+            clearStatus();
+            const response = await fetch("/api/audit-logs?limit=100");
+            const body = await response.json().catch(() => null);
+
+            if (!response.ok) {
+                setStatus("Failed to fetch logs from the API.", true);
+                renderLogs([]);
+                return;
+            }
+
+            renderLogs(body);
+            setStatus(`Loaded ${body.length} log entries.`, false);
+        }
+
+        async function deleteLogById(logId) {
+            const normalizedLogId = logId.trim();
+            if (!normalizedLogId) {
+                setDeleteError("Audit log ID is required.");
+                return;
+            }
+
+            const response = await fetch(`/api/audit-logs/${encodeURIComponent(normalizedLogId)}`, {
+                method: "DELETE"
+            });
+
+            if (response.status === 404) {
+                setStatus("Audit log not found for the provided ID.", true);
+                return;
+            }
+
+            if (!response.ok) {
+                setStatus("Audit log deletion failed.", true);
+                return;
+            }
+
+            setStatus(`Deleted audit log ${normalizedLogId}.`, false);
+            await fetchLogs();
+        }
+
+        refreshButton.addEventListener("click", async () => {
+            await fetchLogs();
+        });
+
+        deleteForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            clearDeleteError();
+            await deleteLogById(deleteLogIdInput.value);
+        });
+
+        logsTableBody.addEventListener("click", async (event) => {
+            const button = event.target.closest("button[data-log-id]");
+            if (!button) {
+                return;
+            }
+
+            clearDeleteError();
+            await deleteLogById(button.dataset.logId);
+        });
+
+        fetchLogs().catch(() => {
+            setStatus("Unable to reach audit log API endpoint.", true);
+        });
+    </script>
+}

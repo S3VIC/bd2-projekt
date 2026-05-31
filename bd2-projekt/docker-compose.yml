@@ -16,6 +16,23 @@ services:
       timeout: 5s
       retries: 8
 
+  mongo:
+    image: mongo:6.0
+    container_name: bd2-mongo
+    restart: unless-stopped
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: [ "CMD-SHELL", "mongosh --username $${MONGO_INITDB_ROOT_USERNAME} --password $${MONGO_INITDB_ROOT_PASSWORD} --authenticationDatabase admin --eval \"db.adminCommand('ping')\" --quiet" ]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+
   web:
     build:
       context: .
@@ -25,6 +42,8 @@ services:
     depends_on:
       mariadb:
         condition: service_healthy
+      mongo:
+        condition: service_healthy
     ports:
       - "8080:8080"
     environment:
@@ -33,6 +52,10 @@ services:
       ConnectionStrings__MariaDb: server=mariadb;port=3306;database=${MARIADB_DATABASE};user=${MARIADB_USER};password=${MARIADB_PASSWORD};
       MariaDbServerVersion: ${MARIADB_SERVER_VERSION:-11.4.0-mariadb}
       SharedAccessPassword: ${SHARED_ACCESS_PASSWORD}
+      Mongo__ConnectionString: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongo:27017/?authSource=admin
+      Mongo__DatabaseName: ${MONGO_DATABASE}
+      Mongo__CollectionName: ${MONGO_COLLECTION}
 
 volumes:
   mariadb-data:
+  mongo-data:

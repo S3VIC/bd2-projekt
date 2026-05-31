@@ -5,6 +5,7 @@ using bd2_projekt.Data;
 using bd2_projekt.Models;
 using bd2_projekt.Repositories;
 using Microsoft.EntityFrameworkCore;
+using MongoDB.Driver;
 
 var builder = WebApplication.CreateBuilder(args);
 var connectionString = builder.Configuration.GetConnectionString("MariaDb")
@@ -25,6 +26,15 @@ if (string.IsNullOrWhiteSpace(sharedAccessPassword))
         "Configuration key 'SharedAccessPassword' is missing. " +
         "Set it via environment variables or dotnet user-secrets.");
 }
+var mongoConnectionString = builder.Configuration["Mongo:ConnectionString"];
+if (string.IsNullOrWhiteSpace(mongoConnectionString))
+{
+    throw new InvalidOperationException(
+        "Configuration key 'Mongo:ConnectionString' is missing. " +
+        "Set it via environment variables or dotnet user-secrets.");
+}
+var mongoDatabaseName = builder.Configuration["Mongo:DatabaseName"] ?? "event_audit";
+var mongoCollectionName = builder.Configuration["Mongo:CollectionName"] ?? "registration_logs";
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -32,9 +42,12 @@ builder.Services.AddOpenApi();
 builder.Services.AddRazorPages();
 builder.Services.AddDbContext<ReservationDbContext>(options =>
 {
-    options.UseMySql(connectionString, ServerVersion.Parse(serverVersion));
+    options.UseMySql(connectionString, Microsoft.EntityFrameworkCore.ServerVersion.Parse(serverVersion));
 });
 builder.Services.AddScoped<IReservationRepository, ReservationRepository>();
+builder.Services.AddSingleton<IMongoClient>(_ => new MongoClient(mongoConnectionString));
+builder.Services.AddSingleton(new MongoAuditOptions(mongoDatabaseName, mongoCollectionName));
+builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 
 var app = builder.Build();
 
@@ -88,6 +101,74 @@ app.MapPost("/api/reservations", async (
     })
     .WithName("CreateReservation");
 
+app.MapPost("/api/audit-logs", async (
+        AuditLogRequest request,
+        IAuditLogRepository auditLogRepository,
+        CancellationToken cancellationToken) =>
+    {
+        var normalizedRequest = request.Normalize();
+        var validationErrors = ValidateAuditLogRequest(normalizedRequest);
+        if (validationErrors is not null)
+        {
+            return Results.ValidationProblem(validationErrors);
+        }
+
+        var auditLog = new AuditLog
+        {
+            Outcome = normalizedRequest.Outcome,
+            EventType = normalizedRequest.EventType,
+            Email = normalizedRequest.Email,
+            ReservationId = normalizedRequest.ReservationId?.ToString("D"),
+            HttpStatusCode = normalizedRequest.HttpStatusCode,
+            Message = normalizedRequest.Message,
+            PayloadJson = normalizedRequest.PayloadJson,
+            Source = normalizedRequest.Source ?? "webapp",
+            CreatedAtUtc = DateTimeOffset.UtcNow
+        };
+
+        var createdAuditLog = await auditLogRepository.CreateAsync(auditLog, cancellationToken);
+        return Results.Accepted($"/api/audit-logs/{createdAuditLog.AuditLogId}", new { createdAuditLog.AuditLogId });
+    })
+    .WithName("CreateAuditLog");
+
+app.MapGet("/api/audit-logs", async (
+        int? limit,
+        IAuditLogRepository auditLogRepository,
+        CancellationToken cancellationToken) =>
+    {
+        var resolvedLimit = limit ?? 100;
+        if (resolvedLimit is < 1 or > 500)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["limit"] = ["Limit must be between 1 and 500."]
+            });
+        }
+
+        var logs = await auditLogRepository.GetLatestAsync(resolvedLimit, cancellationToken);
+        return Results.Ok(logs);
+    })
+    .WithName("GetAuditLogs");
+
+app.MapDelete("/api/audit-logs/{auditLogId}", async (
+        string auditLogId,
+        IAuditLogRepository auditLogRepository,
+        CancellationToken cancellationToken) =>
+    {
+        var normalizedAuditLogId = auditLogId.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedAuditLogId))
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["auditLogId"] = ["Audit log ID is required."]
+            });
+        }
+
+        var deleted = await auditLogRepository.DeleteByIdAsync(normalizedAuditLogId, cancellationToken);
+        return deleted ? Results.NoContent() : Results.NotFound();
+    })
+    .WithName("DeleteAuditLogById");
+
 app.MapGet("/api/reservations", async (
         IReservationRepository reservationRepository,
         CancellationToken cancellationToken) =>
@@ -113,6 +194,30 @@ app.MapRazorPages();
 app.Run();
 
 static Dictionary<string, string[]>? ValidateReservationRequest(ReservationRequest request)
+{
+    var validationContext = new ValidationContext(request);
+    var validationResults = new List<ValidationResult>();
+
+    if (Validator.TryValidateObject(request, validationContext, validationResults, validateAllProperties: true))
+    {
+        return null;
+    }
+
+    return validationResults
+        .SelectMany(result =>
+            result.MemberNames.Any()
+                ? result.MemberNames.Select(member => new { Member = member, result.ErrorMessage })
+                : [new { Member = "request", result.ErrorMessage }])
+        .GroupBy(entry => entry.Member)
+        .ToDictionary(
+            group => group.Key,
+            group => group
+                .Select(entry => entry.ErrorMessage ?? "Invalid value.")
+                .Distinct()
+                .ToArray());
+}
+
+static Dictionary<string, string[]>? ValidateAuditLogRequest(AuditLogRequest request)
 {
     var validationContext = new ValidationContext(request);
     var validationResults = new List<ValidationResult>();

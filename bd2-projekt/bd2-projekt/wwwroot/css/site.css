@@ -29,6 +29,22 @@ body {
     opacity: 0.92;
 }
 
+.app-nav {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1rem;
+}
+
+.app-nav a {
+    color: #dbeafe;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.app-nav a:hover {
+    text-decoration: underline;
+}
+
 .app-shell {
     width: min(760px, 92vw);
     margin: 0 auto;
@@ -79,6 +95,10 @@ body {
     margin-top: 1rem;
 }
 
+.delete-log-form {
+    margin-top: 1.3rem;
+}
+
 .form-row {
     display: grid;
     gap: 0.35rem;
@@ -120,6 +140,35 @@ select:focus {
     gap: 0.7rem;
 }
 
+.logs-toolbar {
+    margin-top: 1rem;
+}
+
+.logs-table-wrapper {
+    margin-top: 1rem;
+    overflow-x: auto;
+}
+
+.logs-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 820px;
+}
+
+.logs-table th,
+.logs-table td {
+    border-bottom: 1px solid #e5e7eb;
+    padding: 0.6rem 0.55rem;
+    text-align: left;
+    vertical-align: top;
+    font-size: 0.88rem;
+}
+
+.logs-table th {
+    font-size: 0.82rem;
+    color: #374151;
+}
+
 .btn {
     border: 0;
     border-radius: 8px;
@@ -144,6 +193,11 @@ select:focus {
 
 .btn-primary:hover {
     background: #1d4ed8;
+}
+
+.btn-small {
+    padding: 0.35rem 0.7rem;
+    font-size: 0.8rem;
 }
 
 @media (max-width: 640px) {

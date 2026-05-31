@@ -24,5 +24,6 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
 
         reservation.HasIndex(entity => entity.SubmittedAtUtc);
         reservation.HasIndex(entity => entity.Email);
+
     }
 }

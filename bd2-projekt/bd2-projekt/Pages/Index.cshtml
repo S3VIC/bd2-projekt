@@ -90,6 +90,18 @@
             Object.values(fieldIds).forEach(field => setFieldError(field, ""));
         }
 
+        async function sendAuditLog(logPayload) {
+            try {
+                await fetch("/api/audit-logs", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(logPayload)
+                });
+            } catch {
+                // Logging should not block reservation UX.
+            }
+        }
+
         function validateClient(payload) {
             const errors = {};
             if (!payload.fullName || payload.fullName.length < 3 || payload.fullName.length > 120) {
@@ -139,6 +151,14 @@
             const hasClientErrors = Object.keys(clientErrors).length > 0;
             if (hasClientErrors) {
                 Object.entries(clientErrors).forEach(([field, message]) => setFieldError(field, message));
+                await sendAuditLog({
+                    outcome: "client_validation_error",
+                    eventType: payload.eventType || null,
+                    email: payload.email || null,
+                    message: "Client-side validation failed before reservation request.",
+                    payloadJson: JSON.stringify(clientErrors),
+                    source: "web_form"
+                });
                 setStatus("Please correct form errors before sending it.", true);
                 return;
             }
@@ -167,18 +187,57 @@
                                 setFieldError(field, values[0]);
                             }
                         });
+
+                        await sendAuditLog({
+                            outcome: "registration_error",
+                            eventType: payload.eventType || null,
+                            email: payload.email || null,
+                            httpStatusCode: response.status,
+                            message: "Reservation request rejected by API validation.",
+                            payloadJson: JSON.stringify(responseBody.errors),
+                            source: "web_form"
+                        });
+
                         setStatus("Reservation request was rejected. Check validation errors.", true);
                         return;
                     }
+
+                    await sendAuditLog({
+                        outcome: "registration_error",
+                        eventType: payload.eventType || null,
+                        email: payload.email || null,
+                        httpStatusCode: response.status,
+                        message: `Reservation API returned error status ${response.status}.`,
+                        payloadJson: responseBody ? JSON.stringify(responseBody) : null,
+                        source: "web_form"
+                    });
 
                     setStatus("Reservation request failed. Try again.", true);
                     return;
                 }
 
+                await sendAuditLog({
+                    outcome: "registration_success",
+                    eventType: payload.eventType,
+                    email: payload.email,
+                    reservationId: responseBody && responseBody.reservationId ? responseBody.reservationId : null,
+                    httpStatusCode: response.status,
+                    message: "Reservation request accepted.",
+                    payloadJson: responseBody ? JSON.stringify(responseBody) : null,
+                    source: "web_form"
+                });
+
                 form.reset();
                 clearFieldErrors();
                 setStatus("Reservation request accepted and sent to the API.", false);
             } catch {
+                await sendAuditLog({
+                    outcome: "api_unreachable",
+                    eventType: payload.eventType || null,
+                    email: payload.email || null,
+                    message: "Reservation API endpoint is unreachable from the web form.",
+                    source: "web_form"
+                });
                 setStatus("Unable to reach reservation API endpoint.", true);
             }
         });
