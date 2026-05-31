@@ -1,0 +1,9 @@
+**/obj
+**/bin
+**/.tools
+**/.idea
+**/.projectspec
+**/.env
+**/.env.*
+!**/.env.example
+bd2-projekt/local-dotnet-setup.sh

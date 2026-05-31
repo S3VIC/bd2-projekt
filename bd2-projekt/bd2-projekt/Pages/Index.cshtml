@@ -1,0 +1,186 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Create Reservation";
+}
+
+<section class="card">
+    <h2>Create reservation</h2>
+    <p class="muted">Form access is protected with a shared password. Enter client data and pick one of three events.</p>
+
+    <div id="api-status" class="status-message hidden" role="status" aria-live="polite"></div>
+
+    <form id="reservation-form" class="reservation-form" autocomplete="off" novalidate>
+        <div class="form-row">
+            <label asp-for="Input.FullName"></label>
+            <input asp-for="Input.FullName" required minlength="3" maxlength="120" />
+            <span class="field-validation-error" id="error-fullName"></span>
+        </div>
+
+        <div class="form-row">
+            <label asp-for="Input.Email"></label>
+            <input asp-for="Input.Email" required maxlength="254" />
+            <span class="field-validation-error" id="error-email"></span>
+        </div>
+
+        <div class="form-row">
+            <label asp-for="Input.PhoneNumber"></label>
+            <input asp-for="Input.PhoneNumber" maxlength="30" pattern="^\+?[0-9()\-.\s]{7,30}$" />
+            <span class="field-validation-error" id="error-phoneNumber"></span>
+        </div>
+
+        <div class="form-row">
+            <label asp-for="Input.EventType"></label>
+            <select asp-for="Input.EventType" asp-items="Model.EventTypes" required>
+                <option value="">Select event type</option>
+            </select>
+            <span class="field-validation-error" id="error-eventType"></span>
+        </div>
+
+        <div class="form-row">
+            <label asp-for="Input.AccessPassword"></label>
+            <input asp-for="Input.AccessPassword" type="password" required minlength="4" maxlength="128" autocomplete="current-password" />
+            <span class="field-validation-error" id="error-accessPassword"></span>
+        </div>
+
+        <div class="button-row">
+            <button type="reset" id="cancel-button" class="btn btn-light">Cancel</button>
+            <button type="submit" class="btn btn-primary">Reserve</button>
+        </div>
+    </form>
+</section>
+
+@section Scripts {
+    <script>
+        const form = document.getElementById("reservation-form");
+        const cancelButton = document.getElementById("cancel-button");
+        const statusElement = document.getElementById("api-status");
+        const allowedEventTypes = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.EventTypes.Select(item => item.Value)));
+
+        const fieldIds = {
+            FullName: "fullName",
+            Email: "email",
+            PhoneNumber: "phoneNumber",
+            EventType: "eventType",
+            AccessPassword: "accessPassword"
+        };
+
+        function setStatus(message, isError) {
+            statusElement.textContent = message;
+            statusElement.classList.remove("hidden", "is-error");
+            if (isError) {
+                statusElement.classList.add("is-error");
+            }
+        }
+
+        function clearStatus() {
+            statusElement.classList.add("hidden");
+            statusElement.classList.remove("is-error");
+            statusElement.textContent = "";
+        }
+
+        function setFieldError(fieldName, message) {
+            const element = document.getElementById(`error-${fieldName}`);
+            if (element) {
+                element.textContent = message;
+            }
+        }
+
+        function clearFieldErrors() {
+            Object.values(fieldIds).forEach(field => setFieldError(field, ""));
+        }
+
+        function validateClient(payload) {
+            const errors = {};
+            if (!payload.fullName || payload.fullName.length < 3 || payload.fullName.length > 120) {
+                errors.fullName = "Client full name is required (3-120 characters).";
+            }
+
+            if (!payload.email || payload.email.length > 254) {
+                errors.email = "Email address is required (max 254 characters).";
+            } else if (!/^[^\s@@]+@@[^\s@@]+\.[^\s@@]+$/.test(payload.email)) {
+                errors.email = "Email address format is invalid.";
+            }
+
+            if (payload.phoneNumber && !/^\+?[0-9()\-.\s]{7,30}$/.test(payload.phoneNumber)) {
+                errors.phoneNumber = "Phone number format is invalid.";
+            }
+
+            if (!payload.eventType || !allowedEventTypes.includes(payload.eventType)) {
+                errors.eventType = "Please select one of the available event types.";
+            }
+
+            if (!payload.accessPassword || payload.accessPassword.length < 4 || payload.accessPassword.length > 128) {
+                errors.accessPassword = "Access password is required (4-128 characters).";
+            }
+
+            return errors;
+        }
+
+        cancelButton.addEventListener("click", () => {
+            clearFieldErrors();
+            clearStatus();
+        });
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            clearFieldErrors();
+            clearStatus();
+
+            const payload = {
+                fullName: document.getElementById("Input_FullName").value.trim(),
+                email: document.getElementById("Input_Email").value.trim(),
+                phoneNumber: document.getElementById("Input_PhoneNumber").value.trim(),
+                eventType: document.getElementById("Input_EventType").value,
+                accessPassword: document.getElementById("Input_AccessPassword").value
+            };
+
+            const clientErrors = validateClient(payload);
+            const hasClientErrors = Object.keys(clientErrors).length > 0;
+            if (hasClientErrors) {
+                Object.entries(clientErrors).forEach(([field, message]) => setFieldError(field, message));
+                setStatus("Please correct form errors before sending it.", true);
+                return;
+            }
+
+            const apiPayload = {
+                fullName: payload.fullName,
+                email: payload.email,
+                phoneNumber: payload.phoneNumber || null,
+                eventType: payload.eventType,
+                accessPassword: payload.accessPassword
+            };
+
+            try {
+                const response = await fetch("/api/reservations", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(apiPayload)
+                });
+
+                const responseBody = await response.json().catch(() => null);
+                if (!response.ok) {
+                    if (responseBody && responseBody.errors) {
+                        Object.entries(responseBody.errors).forEach(([key, values]) => {
+                            const field = fieldIds[key];
+                            if (field && Array.isArray(values) && values.length > 0) {
+                                setFieldError(field, values[0]);
+                            }
+                        });
+                        setStatus("Reservation request was rejected. Check validation errors.", true);
+                        return;
+                    }
+
+                    setStatus("Reservation request failed. Try again.", true);
+                    return;
+                }
+
+                form.reset();
+                clearFieldErrors();
+                setStatus("Reservation request accepted and sent to the API.", false);
+            } catch {
+                setStatus("Unable to reach reservation API endpoint.", true);
+            }
+        });
+    </script>
+}

@@ -1,0 +1,157 @@
+:root {
+    color-scheme: light;
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: #f4f6fb;
+    color: #1f2937;
+}
+
+.app-header {
+    background: linear-gradient(135deg, #4338ca, #2563eb);
+    color: #fff;
+    padding: 2rem 0;
+}
+
+.app-header h1 {
+    margin: 0;
+    font-size: 1.8rem;
+}
+
+.app-header p {
+    margin: 0.5rem 0 0;
+    opacity: 0.92;
+}
+
+.app-shell {
+    width: min(760px, 92vw);
+    margin: 0 auto;
+}
+
+.app-main {
+    padding: 2rem 0 3rem;
+}
+
+.card {
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 14px 30px rgba(21, 32, 70, 0.08);
+    padding: 1.6rem;
+}
+
+.card h2 {
+    margin: 0;
+}
+
+.muted {
+    margin-top: 0.5rem;
+    color: #4b5563;
+}
+
+.status-message {
+    margin: 1rem 0;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    color: #065f46;
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+}
+
+.status-message.hidden {
+    display: none;
+}
+
+.status-message.is-error {
+    color: #b91c1c;
+    background: #fef2f2;
+    border-color: #fecaca;
+}
+
+.reservation-form {
+    display: grid;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.form-row {
+    display: grid;
+    gap: 0.35rem;
+}
+
+label {
+    font-weight: 600;
+}
+
+input,
+select {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 0.65rem 0.75rem;
+    font-size: 0.95rem;
+    background: #fff;
+}
+
+input:focus,
+select:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.field-validation-error {
+    color: #b91c1c;
+    font-size: 0.86rem;
+}
+
+.field-validation-error:empty {
+    display: none;
+}
+
+.button-row {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.7rem;
+}
+
+.btn {
+    border: 0;
+    border-radius: 8px;
+    padding: 0.65rem 1.1rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.btn-light {
+    background: #e5e7eb;
+    color: #111827;
+}
+
+.btn-light:hover {
+    background: #d1d5db;
+}
+
+.btn-primary {
+    background: #2563eb;
+    color: #fff;
+}
+
+.btn-primary:hover {
+    background: #1d4ed8;
+}
+
+@media (max-width: 640px) {
+    .button-row {
+        justify-content: stretch;
+    }
+
+    .btn {
+        flex: 1;
+    }
+}
